@@ -97,11 +97,16 @@ NextAuth with an IdP), per-attorney accounts, roles, audit log of who marked a l
 ## 8. Storage
 
 - **Database:** Postgres via `docker-compose` (SQLAlchemy 2.0 + Alembic migrations).
-  Tests run against SQLite for speed.
-- **Resumes:** local disk (`backend/var/uploads/`, docker volume), behind a
-  `FileStorage` interface. Files are served only through the authenticated download
-  endpoint — never a public static path (resumes are PII).
-- *Production path:* S3 + presigned URLs; the interface makes that a drop-in.
+  Tests run against SQLite for speed. Object storage cannot replace this: lead rows
+  are queried, listed, and state-transitioned — relational work.
+- **Resumes:** S3-compatible object storage via boto3 — **MinIO** in docker-compose
+  locally; moving to real AWS S3 is only an endpoint/credential change, no code.
+  Behind the same `FileStorage` interface there is a local-disk fallback (used by
+  tests and non-docker dev when `S3_ENDPOINT_URL` is unset). Files are served only
+  through the authenticated download endpoint — never a public bucket or static path
+  (resumes are PII).
+- *Production path:* AWS S3 with presigned download URLs, bucket versioning +
+  lifecycle rules.
 
 ## 9. Repo structure
 
@@ -141,7 +146,7 @@ NextAuth with an IdP), per-attorney accounts, roles, audit log of who marked a l
 | Email | Resend + console fallback | Reviewer can run E2E without secrets; real integration still demonstrated. |
 | Emails async? | BackgroundTasks, post-commit | Submission UX must not depend on the email provider; full queue is overkill here. |
 | Auth | Env-credential + JWT | Smallest thing that is honestly "auth"; production path documented. |
-| Resume storage | Local disk behind interface | No cloud account needed to run; S3 swap is one class. |
+| Resume storage | MinIO (S3 API) via boto3 | Same code path as production S3 — promoting to AWS is config-only. Local-disk fallback keeps tests and no-docker dev dependency-free. MinIO complements Postgres (files vs. queryable lead rows); it does not replace it. |
 | Monorepo | Yes | One clone, one compose file, one README — reviewer friction matters. |
 
 ## 11. Out of scope / future work
