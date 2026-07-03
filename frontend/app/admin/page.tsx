@@ -114,7 +114,7 @@ export default function AdminDashboardPage() {
                 <th>Resume</th>
                 <th>Submitted</th>
                 <th>Status</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -127,19 +127,28 @@ export default function AdminDashboardPage() {
                     <a href={`mailto:${lead.email}`}>{lead.email}</a>
                   </td>
                   <td>
-                    <button className="link" onClick={() => handleDownload(lead)}>
+                    <button
+                      className="link truncate"
+                      title={lead.resume_filename}
+                      onClick={() => handleDownload(lead)}
+                    >
                       {lead.resume_filename}
                     </button>
                   </td>
-                  <td>{new Date(lead.created_at).toLocaleString()}</td>
-                  <td>
+                  <td className="nowrap">
+                    {new Date(lead.created_at).toLocaleString(undefined, {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </td>
+                  <td className="nowrap">
                     {lead.state === "PENDING" ? (
                       <span className="badge pending">PENDING</span>
                     ) : (
                       <span className="badge reached-out">REACHED_OUT</span>
                     )}
                   </td>
-                  <td>
+                  <td className="nowrap">
                     {lead.state === "PENDING" && (
                       <button
                         className="secondary"

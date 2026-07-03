@@ -38,7 +38,7 @@ services:
       DATABASE_URL: postgresql+psycopg://alma:alma@db:5432/alma
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-32-bytes-minimum!}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-attorney@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-letmein}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Password1234!}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       ADMIN_ALLOWED_EMAILS: ${ADMIN_ALLOWED_EMAILS:-nhshpr@gmail.com,noahs921@gmail.com,noahshapiro.dev@gmail.com}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

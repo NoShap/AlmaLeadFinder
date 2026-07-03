@@ -46,7 +46,7 @@ validation, and the state machine live in the FastAPI service.
 | id                | UUID, pk                          | server-generated                        |
 | first_name        | text, required                    |                                         |
 | last_name         | text, required                    |                                         |
-| email             | text, required                    | validated (pydantic `EmailStr`)         |
+| email             | text, required, **unique**        | validated (pydantic `EmailStr`), stored lowercase — one lead per prospect email |
 | resume_path       | text, required                    | storage key, not a public URL           |
 | resume_filename   | text, required                    | original name, for download             |
 | resume_content_type | text, required                  | allowlist: pdf, doc, docx               |
@@ -63,7 +63,7 @@ lean toward 409 to keep the audit story clean.)
 
 | Endpoint                        | Auth | Purpose                                              |
 |---------------------------------|------|------------------------------------------------------|
-| `POST /api/leads`               | none | Create lead. `multipart/form-data` (fields + file). Returns 201 + lead JSON (no resume path leaked). |
+| `POST /api/leads`               | none | Create lead. `multipart/form-data` (fields + file). Returns 201 + lead JSON (no resume path leaked). Idempotent per email: a duplicate (case-insensitive) returns 409 — enforced by a unique index, not just an app-level check, so concurrent submits can't race past it. |
 | `GET /api/leads`                | 🔒   | List leads, newest first. Pagination via `limit`/`offset`. |
 | `GET /api/leads/{id}`           | 🔒   | Single lead detail.                                  |
 | `PATCH /api/leads/{id}`         | 🔒   | Body: `{"state": "REACHED_OUT"}`. Only valid transition allowed. |

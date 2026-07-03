@@ -25,7 +25,7 @@ Then:
 | URL | What |
 |---|---|
 | http://localhost:3000 | Public lead form |
-| http://localhost:3000/admin | Attorney dashboard (fallback login: `attorney@example.com` / `letmein`; Google Sign-In when configured — see below) |
+| http://localhost:3000/admin | Attorney dashboard (fallback login: `attorney@example.com` / `Password1234!`; Google Sign-In when configured — see below) |
 | http://localhost:8000/docs | API docs (OpenAPI) |
 | http://localhost:9001 | MinIO console (login: `alma` / `alma-minio-secret`) — browse the `resumes` bucket |
 
@@ -95,9 +95,17 @@ pytest
 ```
 
 Tests run against in-memory SQLite with a recording email fake — no services needed.
+(E2E tests are excluded from the default run; see below.)
 
-With the Docker stack running, `scripts/e2e.sh` smoke-tests the real thing end to end:
-submission → auth → resume roundtrip through MinIO → state transition → emails in logs.
+With the Docker stack running, two suites test the real thing end to end:
+
+```bash
+cd backend && pytest -m e2e        # API contract: submission → auth → resume roundtrip through MinIO → state machine
+cd frontend && npx playwright test # browser journeys: lead form → login → dashboard → mark reached out
+```
+
+`scripts/e2e.sh` runs both. Submission emails land in the backend logs
+(`docker compose logs backend | grep "console email"`).
 
 ## Configuration
 

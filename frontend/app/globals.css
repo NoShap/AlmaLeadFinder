@@ -54,7 +54,7 @@ body {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 40px 24px 80px;
 }
@@ -195,7 +195,7 @@ td {
   text-align: left;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+  vertical-align: middle;
 }
 
 th {
@@ -203,6 +203,26 @@ th {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Long emails may wrap rather than force the table wide. */
+td a {
+  word-break: break-all;
+}
+
+td.nowrap {
+  white-space: nowrap;
+}
+
+/* Resume filenames get one line + ellipsis instead of unbounded width. */
+.truncate {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .badge {

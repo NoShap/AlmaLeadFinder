@@ -149,3 +149,45 @@ non-allowlisted 403, delisted-token 403); `next build` clean with middleware
 registered; docker E2E extended with middleware redirect checks — see session log.
 
 ---
+
+## 2026-07-02 — Session 5: idempotency per email, dedupe migration, UI fix
+
+**Human decisions (Noah):** one email = one lead (duplicate submissions rejected);
+clean the existing test data down to unique emails; reported the "Mark reached out"
+button missing from the dashboard.
+
+**Button diagnosis (and a fix that was itself wrong):** the button existed but was
+invisible — every table cell was `white-space: nowrap`, so the actions column
+overflowed the card into a horizontal scroll area. The agent's first fix (sticky
+actions column pinned right) was **worse**: it floated over the still-too-wide table,
+clipping the Resume column mid-word and hiding Submitted/Status entirely. A second
+human screenshot caught it. The correct fix addressed the root cause instead of the
+symptom: wider page container (960→1160px), emails allowed to wrap, resume filenames
+ellipsized at 180px, short date format, nowrap only where content must not break
+(dates, badges, button). Lesson logged for AI_USAGE: neither fix attempt was
+verifiable by the API tests or curl E2E — layout bugs needed human eyes (or browser
+tests) both times.
+
+**Idempotency design (agent, accepted):** emails normalized to lowercase; friendly
+409 pre-check *before* the resume upload is accepted; but the source of truth is a
+**unique index** on `leads.email` with `IntegrityError → 409` so concurrent submits
+can't race past the pre-check. Migration 0002 lowercases existing emails, dedupes
+keeping each email's earliest submission (first-wins matches the new create
+semantics), then adds the unique index. Orphaned resume files from deleted dupes are
+left in object storage (documented tradeoff). E2E script switched to a unique
+per-run email + an explicit duplicate-409 step.
+
+**Verification:** 32/32 backend tests (dupe 409, case-insensitive dupe, lowercase
+storage, no emails sent on dupe); migration ran against the live DB: 13 leads → 4
+(one per email); full docker E2E green including the new 2b idempotency step.
+
+**Post-login redirect bug (human-reported, agent-diagnosed):** after Google sign-in,
+`router.push("/admin")` appeared to do nothing. Cause: the header's
+`<Link href="/admin">` prefetches while unauthenticated, so the middleware's 307
+redirect gets stored in Next's client Router Cache; the post-login client-side push
+then replays the cached redirect back to the login page. Fix: navigate with
+`window.location.assign("/admin")` after storing the token (both login flows) so the
+middleware re-evaluates with the fresh cookie. Another one no API-level test could
+see — needed a human clicking the real flow.
+
+---

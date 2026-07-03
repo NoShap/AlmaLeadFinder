@@ -33,3 +33,7 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not e2e'"
+markers = [
+    "e2e: tests against the running docker-compose stack (run with: pytest -m e2e)",
+]

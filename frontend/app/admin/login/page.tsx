@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ApiError, login, loginWithGoogle, storeToken } from "@/lib/api";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -23,7 +22,6 @@ declare global {
 }
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,14 +34,16 @@ export default function AdminLoginPage() {
       try {
         const token = await loginWithGoogle(response.credential);
         storeToken(token);
-        router.push("/admin");
+        // Full navigation (not router.push): the client router may have cached the
+        // pre-login middleware redirect for /admin, which would bounce us back here.
+        window.location.assign("/admin");
       } catch (err) {
         setError(
           err instanceof ApiError ? err.message : "Google sign-in failed. Please try again."
         );
       }
     },
-    [router]
+    []
   );
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function AdminLoginPage() {
     try {
       const token = await login(email, password);
       storeToken(token);
-      router.push("/admin");
+      window.location.assign("/admin");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
       setSubmitting(false);
