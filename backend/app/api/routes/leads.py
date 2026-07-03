@@ -20,7 +20,7 @@ from app.core.security import require_admin
 from app.db.session import get_db
 from app.schemas.lead import LeadList, LeadRead, LeadStateUpdate
 from app.services import leads as lead_service
-from app.services.leads import InvalidStateTransition
+from app.services.leads import DuplicateLeadEmail, InvalidStateTransition
 from app.services.notifications import send_lead_submission_emails
 from app.services.storage import get_storage
 
@@ -71,21 +71,34 @@ async def create_lead(
         validated_email = _email_adapter.validate_python(email)
     except ValidationError:
         raise _field_error("email", "Enter a valid email address")
+    normalized_email = validated_email.lower()
+
+    duplicate_detail = (
+        "It looks like we already have your information — "
+        "our team will reach out to you soon."
+    )
+    # Friendly pre-check before accepting the upload; the unique index below is
+    # what actually guarantees one lead per email under concurrency.
+    if lead_service.get_lead_by_email(db, normalized_email) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=duplicate_detail)
 
     content = await _validate_resume(resume)
     resume_key = get_storage().save(
         resume.filename or "resume", content, resume.content_type or "application/octet-stream"
     )
 
-    lead = lead_service.create_lead(
-        db,
-        first_name=first_name.strip(),
-        last_name=last_name.strip(),
-        email=validated_email,
-        resume_path=resume_key,
-        resume_filename=resume.filename or "resume",
-        resume_content_type=resume.content_type or "application/octet-stream",
-    )
+    try:
+        lead = lead_service.create_lead(
+            db,
+            first_name=first_name.strip(),
+            last_name=last_name.strip(),
+            email=normalized_email,
+            resume_path=resume_key,
+            resume_filename=resume.filename or "resume",
+            resume_content_type=resume.content_type or "application/octet-stream",
+        )
+    except DuplicateLeadEmail:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=duplicate_detail)
 
     # Queued only after the commit above succeeds; runs after the response is sent.
     background_tasks.add_task(

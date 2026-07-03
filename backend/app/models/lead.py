@@ -19,7 +19,8 @@ class Lead(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     last_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    # Stored lowercase; unique so one prospect (by email) has exactly one lead.
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
 
     # Storage key of the uploaded resume; never exposed directly — files are streamed
     # through the authenticated download endpoint.

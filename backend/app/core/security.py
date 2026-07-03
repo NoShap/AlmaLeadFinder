@@ -22,7 +22,10 @@ def is_authorized_admin(email: str) -> bool:
 
 
 def verify_admin_credentials(email: str, password: str) -> bool:
-    email_ok = secrets.compare_digest(email.encode(), settings.admin_email.encode())
+    # Email addresses are case-insensitive by convention; passwords are not.
+    email_ok = secrets.compare_digest(
+        email.lower().encode(), settings.admin_email.lower().encode()
+    )
     password_ok = secrets.compare_digest(password.encode(), settings.admin_password.encode())
     return email_ok and password_ok
 

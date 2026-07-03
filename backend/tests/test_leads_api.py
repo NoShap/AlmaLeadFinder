@@ -25,6 +25,17 @@ class TestCreateLead:
         recipients = {m.to for m in email_recorder.sent}
         assert recipients == {"ada@example.com", settings.attorney_notification_email}
 
+    def test_prospect_and_attorney_emails_have_distinct_content(self, client, email_recorder):
+        create_lead(client)
+        by_recipient = {m.to: m for m in email_recorder.sent}
+        prospect_msg = by_recipient["ada@example.com"]
+        attorney_msg = by_recipient[settings.attorney_notification_email]
+        assert prospect_msg.subject == "We received your information — Alma"
+        assert "Hi Ada," in prospect_msg.html
+        assert attorney_msg.subject == "New lead: Ada Lovelace"
+        assert "ada@example.com" in attorney_msg.html
+        assert prospect_msg.html != attorney_msg.html
+
     def test_email_failure_does_not_fail_submission(self, client, email_recorder, auth_headers):
         email_recorder.fail = True
         response = create_lead(client)
@@ -49,6 +60,23 @@ class TestCreateLead:
     def test_missing_fields_rejected(self, client):
         response = client.post("/api/leads", data={"first_name": "Ada"})
         assert response.status_code == 422
+
+    def test_duplicate_email_rejected(self, client, email_recorder, auth_headers):
+        assert create_lead(client).status_code == 201
+        emails_after_first = len(email_recorder.sent)
+        response = create_lead(client, first_name="Ada2")
+        assert response.status_code == 409
+        assert len(email_recorder.sent) == emails_after_first  # no emails for the dupe
+        listing = client.get("/api/leads", headers=auth_headers).json()
+        assert listing["total"] == 1
+
+    def test_duplicate_email_case_insensitive(self, client):
+        assert create_lead(client, email="ada@example.com").status_code == 201
+        assert create_lead(client, email="Ada@EXAMPLE.com").status_code == 409
+
+    def test_email_stored_lowercase(self, client):
+        body = create_lead(client, email="Ada@Example.COM").json()
+        assert body["email"] == "ada@example.com"
 
 
 class TestAuth:

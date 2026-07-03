@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.lead import Lead, LeadState
@@ -14,6 +15,10 @@ ALLOWED_TRANSITIONS: dict[LeadState, set[LeadState]] = {
     LeadState.PENDING: {LeadState.REACHED_OUT},
     LeadState.REACHED_OUT: set(),
 }
+
+
+class DuplicateLeadEmail(Exception):
+    """A lead with this email already exists — submissions are idempotent per email."""
 
 
 class InvalidStateTransition(Exception):
@@ -42,13 +47,23 @@ def create_lead(
         resume_content_type=resume_content_type,
     )
     db.add(lead)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Unique index on email is the race-proof source of truth; the router's
+        # pre-check only exists to give a friendly error without an upload.
+        db.rollback()
+        raise DuplicateLeadEmail(email)
     db.refresh(lead)
     return lead
 
 
 def get_lead(db: Session, lead_id: uuid.UUID) -> Lead | None:
     return db.get(Lead, lead_id)
+
+
+def get_lead_by_email(db: Session, email: str) -> Lead | None:
+    return db.scalar(select(Lead).where(Lead.email == email))
 
 
 def list_leads(db: Session, *, limit: int = 50, offset: int = 0) -> tuple[list[Lead], int]:

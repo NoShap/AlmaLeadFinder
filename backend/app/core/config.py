@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Dev-fallback credential login (kept so the app runs without Google OAuth setup).
     admin_email: str = "attorney@example.com"
-    admin_password: str = "letmein"
+    admin_password: str = "Password1234!"
 
     # Google Sign-In. Empty client id disables the Google flow (fallback login only).
     google_client_id: str = ""
