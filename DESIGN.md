@@ -1,6 +1,7 @@
 # Alma Lead Management — Design Document
 
-> Status: DRAFT — written before implementation; will be updated as decisions firm up.
+> Status: LIVING — originally drafted before implementation, since updated to match
+> what was built (auth, deletion, and the three-layer test strategy in §9).
 
 ## 1. Problem
 
@@ -29,8 +30,10 @@ attorneys an authenticated internal UI to review leads and mark them as contacte
 │  /            public    │  JSON / │  POST  /api/leads        │──▶ Postgres (leads)
 │               lead form │  multi- │  GET   /api/leads   🔒   │──▶ File storage (resumes)
 │  /admin       internal  │  part   │  PATCH /api/leads/{id} 🔒│──▶ Email service (async)
-│               dashboard │         │  GET   /api/leads/{id}/resume 🔒
-│  /admin/login           │         │  POST  /api/auth/login   │
+│               dashboard │         │  DELETE /api/leads/{id} 🔒
+│  /admin/login           │         │  GET   /api/leads/{id}/resume 🔒
+│                         │         │  POST  /api/auth/login   │
+│                         │         │  POST  /api/auth/google  │
 └─────────────────────────┘         └──────────────────────────┘
 ```
 
@@ -56,8 +59,9 @@ validation, and the state machine live in the FastAPI service.
 | reached_out_at    | timestamptz, nullable             | set on state transition                 |
 
 State transitions are enforced server-side: the PATCH endpoint accepts only
-`PENDING → REACHED_OUT`; anything else returns 409/422. (Idempotent re-marking: TBD —
-lean toward 409 to keep the audit story clean.)
+`PENDING → REACHED_OUT`; anything else returns 409/422, including re-marking an
+already-reached-out lead (409, keeping the audit story clean). The dashboard displays
+the state as "REACHED OUT" — the underscore form is API-only.
 
 ## 5. API contract
 
@@ -67,8 +71,10 @@ lean toward 409 to keep the audit story clean.)
 | `GET /api/leads`                | 🔒   | List leads, newest first. Pagination via `limit`/`offset`. |
 | `GET /api/leads/{id}`           | 🔒   | Single lead detail.                                  |
 | `PATCH /api/leads/{id}`         | 🔒   | Body: `{"state": "REACHED_OUT"}`. Only valid transition allowed. |
+| `DELETE /api/leads/{id}`        | 🔒   | Remove a lead and its stored resume (204). Storage cleanup is best-effort — the DB row is the source of truth. Added so e2e runs can clean up after themselves (§9); doubles as an admin tool. |
 | `GET /api/leads/{id}/resume`    | 🔒   | Stream the resume file for attorney review.          |
-| `POST /api/auth/login`          | none | Credentials → JWT for the internal UI.               |
+| `POST /api/auth/login`          | none | Fallback credentials → JWT for the internal UI.      |
+| `POST /api/auth/google`         | none | Google ID token → same JWT, after signature/audience verification and allowlist check. |
 
 Validation on `POST /api/leads`: email format, file required, content-type + extension
 allowlist, max file size (5 MB). Errors are structured JSON the form can render inline.
@@ -89,9 +95,25 @@ Primary flow: **Google Sign-In (OAuth) with an email allowlist.**
    re-checks the allowlist on each request**, so delisting an email revokes access
    immediately even for unexpired tokens.
 
-Fallback flow: env-configured credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) exchanged
-for the same JWT — kept so reviewers can run the E2E demo without creating a Google
-OAuth client. Disable in production by rotating the password.
+As built for this demo: the OAuth client is a **personal GCP project's client ID**
+(type: Web application, `http://localhost:3000` as the authorized JavaScript origin).
+Only the public client ID is needed — no client secret ships anywhere — and the
+allowlist holds my own Gmail addresses, so real Google sign-in works out of the box
+against my accounts. A production deployment swaps in a company GCP project and
+allowlist via the same two env vars (`GOOGLE_CLIENT_ID`, `ADMIN_ALLOWED_EMAILS`).
+
+Fallback flow: env-configured credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`, defaulting
+to `attorney@example.com`) exchanged for the same JWT — kept so reviewers can run the
+E2E demo without creating a Google OAuth client. The default email is deliberately an
+RFC-reserved `example.com` address so the repo never ships anything resembling a real
+account. Disable in production by rotating the password.
+
+One implementation subtlety both login paths share: after storing the token the app
+does a **full navigation** to `/admin` (`window.location.assign`, not `router.push`).
+Next.js prefetches `/admin` from the nav link before login and the client router
+caches the middleware's redirect-to-login response, so a client-side push would
+bounce straight back to the login page. Caught by the Playwright suite (§9) against
+the production build — dev mode doesn't prefetch, so only e2e testing surfaced it.
 
 *Production path (documented, not built):* per-attorney records with roles instead of
 an env allowlist, HttpOnly session cookies via a BFF pattern, audit log of who marked
@@ -102,9 +124,9 @@ each lead.
 - Provider: **Resend** (simple API, generous free tier). Wrapped behind an
   `EmailService` interface with a **console/log fallback** so the app runs locally
   with zero API keys — the fallback prints the rendered email to stdout.
-- Sender domain: `pactfulapp.com` — a domain I already owned from an unrelated side
-  project, verified in Resend (DKIM/SPF) so delivery to *arbitrary* prospect
-  addresses could be tested end-to-end. Resend's unverified sandbox sender only
+- Sender domain: `pactfulapp.com` — a personal domain I already owned from an
+  unrelated side project, verified in Resend (DKIM/SPF) so delivery to *arbitrary*
+  prospect addresses could be tested end-to-end. Resend's unverified sandbox sender only
   delivers to the account owner's inbox, which is fine for smoke tests but doesn't
   prove the real prospect-confirmation path. The domain is pure configuration
   (`EMAIL_FROM`); a production deployment would swap in the company domain.
@@ -129,7 +151,38 @@ each lead.
 - *Production path:* AWS S3 with presigned download URLs, bucket versioning +
   lifecycle rules.
 
-## 9. Repo structure
+## 9. Testing
+
+Three layers, cheapest first; each layer only covers what the one below it can't.
+
+1. **Hermetic API tests** (`backend/tests`, plain `pytest`) — in-memory SQLite, a
+   recording email fake, local-disk storage in a tmp dir. Cover validation, the
+   state machine, auth, deletion, and that storage keys never leak into responses.
+   Run in well under a second with no services.
+2. **API e2e** (`backend/tests/e2e`, `pytest -m e2e`) — the same contract against the
+   real docker stack: Postgres, a byte-for-byte resume roundtrip through MinIO, and
+   the Next.js middleware gate. Excluded from the default `pytest` run via `addopts`;
+   skips with a clear message when the stack isn't up.
+3. **Browser e2e** (`frontend/e2e`, Playwright) — real user journeys against the
+   running stack: prospect submits the form (including file upload and validation
+   errors); attorney signs in with the fallback credentials, sees the lead, downloads
+   the resume, marks it reached out; auth gating and sign-out. Playwright over
+   Cypress/Selenium: out-of-process control means downloads and the Google Sign-In
+   iframe just work, assertions auto-wait, and the trace viewer makes failures
+   debuggable from artifacts alone.
+
+`scripts/e2e.sh` runs layers 2 and 3 back to back.
+
+**Test-data hygiene:** every e2e run deletes the leads it created — after first
+asserting they actually appeared in the admin list — via `DELETE /api/leads/{id}`
+(tracked automatically in the Playwright helpers, inline in the pytest lifecycle
+test). The dashboard shows real data; test runs must not clutter it.
+
+This layering earned its keep immediately: the Playwright suite caught the
+production-build-only login bounce described in §6 that dev-mode testing and the
+API-level tests structurally could not see.
+
+## 10. Repo structure
 
 ```
 .
@@ -137,7 +190,9 @@ each lead.
 ├── DESIGN.md            # this document
 ├── NOTES.md             # running agent-usage / attribution log
 ├── AI_USAGE.md          # final ½-page agent-usage writeup (from NOTES.md)
-├── docker-compose.yml   # postgres + backend + frontend
+├── docker-compose.yml   # postgres + minio + backend + frontend
+├── scripts/
+│   └── e2e.sh           # runs both e2e suites against the docker stack
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            # app factory, router mounting
@@ -147,18 +202,21 @@ each lead.
 │   │   ├── schemas/           # pydantic request/response schemas
 │   │   ├── services/          # email.py, storage.py, leads.py (state machine)
 │   │   └── db/                # session, Alembic migrations
-│   ├── tests/
+│   ├── tests/                 # hermetic API tests (SQLite + fakes)
+│   │   └── e2e/               # API contract vs. the live stack (pytest -m e2e)
 │   └── pyproject.toml
 └── frontend/
     ├── app/
     │   ├── page.tsx           # public lead form
     │   ├── admin/page.tsx     # leads dashboard (guarded)
     │   └── admin/login/page.tsx
+    ├── middleware.ts          # cookie-presence gate for /admin routes
     ├── lib/api.ts             # typed API client
-    └── components/
+    ├── e2e/                   # Playwright browser journeys + cleanup helpers
+    └── playwright.config.ts
 ```
 
-## 10. Key decisions & tradeoffs
+## 11. Key decisions & tradeoffs
 
 | Decision | Choice | Why / alternative rejected |
 |---|---|---|
@@ -169,8 +227,11 @@ each lead.
 | Auth | Google OAuth + email allowlist, JWT in cookie, Next middleware gate | Real OAuth without secrets (ID-token flow); allowlist re-checked per request server-side. Env-credential fallback kept so reviewers can run the demo with zero OAuth setup. |
 | Resume storage | MinIO (S3 API) via boto3 | Same code path as production S3 — promoting to AWS is config-only. Local-disk fallback keeps tests and no-docker dev dependency-free. MinIO complements Postgres (files vs. queryable lead rows); it does not replace it. |
 | Monorepo | Yes | One clone, one compose file, one README — reviewer friction matters. |
+| Browser e2e | Playwright | Out-of-process (downloads + Google iframe work), auto-waiting, trace viewer. Kept to the critical journeys — edge cases live in the cheaper pytest layers. Caught a real production-build-only login bug (§6). |
+| Lead deletion | Admin-only `DELETE`, added late | Needed so e2e runs clean up after themselves; e2e suites verify a lead appears in the list before removing it. Resume removed from storage best-effort. |
+| Test credentials | `attorney@example.com` fallback | RFC-reserved fake domain — the repo must never contain anything that reads as a real person's account or password. |
 
-## 11. Out of scope / future work
+## 12. Out of scope / future work
 
 - AI-assisted lead qualification (e.g., visa-fit summary from the CV)
 - Multi-attorney routing / assignment, lead notes, richer state machine (e.g., `CLOSED`)
