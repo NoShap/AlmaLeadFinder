@@ -22,7 +22,6 @@ def send_lead_submission_emails(
     email_service: EmailService | None = None,
 ) -> None:
     service = email_service or get_email_service()
-    dashboard_url = f"{settings.frontend_origin}/admin"
 
     messages = [
         email_templates.prospect_confirmation(first_name=first_name, to=prospect_email),
@@ -30,7 +29,6 @@ def send_lead_submission_emails(
             first_name=first_name,
             last_name=last_name,
             email=prospect_email,
-            dashboard_url=dashboard_url,
             to=settings.attorney_notification_email,
         ),
     ]
