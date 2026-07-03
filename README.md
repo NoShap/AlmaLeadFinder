@@ -104,8 +104,11 @@ cd backend && pytest -m e2e        # API contract: submission → auth → resum
 cd frontend && npx playwright test # browser journeys: lead form → login → dashboard → mark reached out
 ```
 
-`scripts/e2e.sh` runs both. Submission emails land in the backend logs
-(`docker compose logs backend | grep "console email"`).
+First Playwright run only: `cd frontend && npm install && npx playwright install chromium`.
+
+`scripts/e2e.sh` runs both suites. Every e2e run deletes the leads it created, so
+test runs don't clutter the dashboard. Submission emails land in the backend logs
+(`docker compose logs backend | grep "console email"`) unless Resend is configured.
 
 ## Configuration
 
@@ -132,9 +135,13 @@ backend/
     models/        # SQLAlchemy models (Lead + state enum)
     schemas/       # pydantic request/response models
     services/      # business logic: leads (state machine), email, storage
-  tests/           # API tests (SQLite + email fake)
+  tests/           # hermetic API tests (SQLite + email fake)
+    e2e/           # API contract against the live stack (pytest -m e2e)
 frontend/
   app/             # / (public form), /admin (dashboard), /admin/login
+  middleware.ts    # cookie gate for /admin routes
   lib/api.ts       # typed API client
-docker-compose.yml # postgres + backend + frontend
+  e2e/             # Playwright browser journeys (+ lead cleanup helpers)
+scripts/e2e.sh     # runs both e2e suites
+docker-compose.yml # postgres + minio + backend + frontend
 ```

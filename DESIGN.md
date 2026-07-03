@@ -132,7 +132,13 @@ each lead.
   (`EMAIL_FROM`); a production deployment would swap in the company domain.
 - Two templates on lead creation:
   1. **Prospect confirmation** — "Thanks {first_name}, we received your information."
-  2. **Attorney notification** — lead summary + link to the admin dashboard.
+  2. **Attorney notification** — lead summary (name + email) and a plain-text pointer
+     to the admin dashboard.
+- **No hyperlinks in either template** — a deliverability lesson learned the hard way:
+  Gmail silently dropped the attorney notification when it carried an
+  `http://localhost:3000/admin` dashboard link (accepted by Resend with a 200, never
+  delivered — confirmed by A/B testing identical emails with and without the link).
+  Unit tests now pin both templates as link-free.
 - Sent **after the DB commit**, via FastAPI `BackgroundTasks`: email failure must not
   fail the submission. Failures are logged.
 - *Production path:* queue (SQS/Celery) with retries + dead-letter, delivery webhooks.
@@ -186,7 +192,7 @@ API-level tests structurally could not see.
 
 ```
 .
-├── README.md            # how to run locally (docker-compose up + seed steps)
+├── README.md            # how to run locally (docker compose up) and run the tests
 ├── DESIGN.md            # this document
 ├── NOTES.md             # running agent-usage / attribution log
 ├── AI_USAGE.md          # final ½-page agent-usage writeup (from NOTES.md)

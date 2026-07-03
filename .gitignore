@@ -11,6 +11,10 @@ node_modules/
 out/
 next-env.d.ts.bak
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+
 # Local data
 backend/var/
 *.sqlite3

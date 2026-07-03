@@ -19,25 +19,38 @@ tests, and first drafts of README/DESIGN docs.
 **Decided by hand (human):** product framing and scope (notably: *rejecting* AI lead
 scoring as out of scope — see NOTES.md Disagreement #1), the email-provider choice
 (Resend), the hard requirement that lead persistence be decoupled from email delivery,
-Docker as the run story, and review/approval of every file before commit.
+the one-lead-per-email idempotency requirement (see below), Docker as the run story,
+and review/approval of every file before commit.
 
 ## One place the agent produced wrong or subtly bad code
 
-The agent's console-fallback email transport "sent" emails via `logger.info(...)` —
-but under uvicorn the app's loggers have no handler, and Python's last-resort handler
-drops anything below WARNING. Result: submission emails were **silently discarded**
-while every test stayed green (the unit tests assert against a recording fake, not the
-logs) and every API call returned the correct status. It was caught only because the
-docker-compose E2E smoke run included a step that grepped the backend logs for the
-rendered emails and found zero. **Fix:** configure `logging.basicConfig(level=INFO)`
-at app startup. The failure mode is instructive: the email path was deliberately
-designed to be failure-tolerant, which also made its failure invisible — the demo path
-itself had to be exercised end-to-end. (Smaller catches, detailed in NOTES.md: a
-corrupted hex color token in generated CSS caught in diff review, and a too-short JWT
-dev secret surfaced as a warning when the agent ran its own test suite.)
+The agent's original public-form endpoint wasn't idempotent: every submission created
+a new lead, so a prospect re-submitting the same email produced duplicate rows (and
+duplicate resumes in storage) — something real users do constantly. Nothing failed:
+every test was green, because the tests encoded the same assumption the code did.
+This was a genuine disagreement — the agent had shipped it as acceptable behavior; I
+pushed back and recommended one-lead-per-email idempotency. The agent then proposed
+the design I accepted: emails normalized to lowercase, a friendly 409 *before* the
+resume upload is accepted, and — because a pre-check alone can be raced by concurrent
+submits — a **unique index** on `leads.email` as the actual source of truth
+(`IntegrityError → 409`), plus a migration that lowercases and dedupes existing rows
+(first submission wins, matching the new create semantics). The E2E suite gained an
+explicit duplicate-409 step. The failure mode is instructive: the code was never
+"broken," it was a missing product invariant that no amount of testing could surface,
+because the tests shared the code's blind spot — it took a human looking at the
+actual dashboard filling with duplicates. (Smaller catches, detailed in NOTES.md: the
+console-fallback email transport logged below uvicorn's default level, silently
+discarding demo emails until the docker E2E grepped the logs and found zero; a
+corrupted hex color token in generated CSS caught in diff review; a too-short JWT dev
+secret flagged when the agent ran its own test suite.)
 
 ## Attribution
 
+- **All code in this repository was written by the coding agent.** The human
+  contribution was direction, not authorship: scoping and framing each task,
+  iteratively re-prompting and course-correcting where output missed the mark
+  (see the idempotency case above), and reviewing every file before it was
+  committed. Nothing shipped unread.
 - Agent-generated commits carry a `Co-Authored-By: Claude` trailer.
 - [NOTES.md](NOTES.md) is the per-session log of what was delegated, what was decided
   by the human, disagreements, and mistakes caught.
