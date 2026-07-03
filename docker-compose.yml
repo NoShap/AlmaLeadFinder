@@ -39,6 +39,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-32-bytes-minimum!}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-attorney@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-letmein}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      ADMIN_ALLOWED_EMAILS: ${ADMIN_ALLOWED_EMAILS:-nhshpr@gmail.com,noahs921@gmail.com,noahshapiro.dev@gmail.com}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Alma <onboarding@resend.dev>}
       ATTORNEY_NOTIFICATION_EMAIL: ${ATTORNEY_NOTIFICATION_EMAIL:-attorney@example.com}
@@ -58,6 +60,7 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     ports:
       - "3000:3000"
     depends_on:

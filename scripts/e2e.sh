@@ -50,4 +50,10 @@ echo "GET / -> $CODE"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/admin/login)
 echo "GET /admin/login -> $CODE"
 
+echo "== 11. middleware gates /admin without auth cookie"
+REDIRECT=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:3000/admin)
+echo "GET /admin (no cookie) -> $REDIRECT (expect 307 -> /admin/login)"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -b "alma_admin_token=$TOKEN" http://localhost:3000/admin)
+echo "GET /admin (with cookie) -> $CODE (expect 200)"
+
 echo "== E2E PASSED"

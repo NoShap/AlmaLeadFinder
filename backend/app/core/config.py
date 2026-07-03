@@ -9,8 +9,14 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me-32-bytes-minimum!"
     jwt_expires_minutes: int = 8 * 60
 
+    # Dev-fallback credential login (kept so the app runs without Google OAuth setup).
     admin_email: str = "attorney@example.com"
     admin_password: str = "letmein"
+
+    # Google Sign-In. Empty client id disables the Google flow (fallback login only).
+    google_client_id: str = ""
+    # Comma-separated allowlist of Google accounts permitted into the admin dashboard.
+    admin_allowed_emails: str = "nhshpr@gmail.com,noahs921@gmail.com,noahshapiro.dev@gmail.com"
 
     # Email. When resend_api_key is empty, emails are logged to stdout instead of sent,
     # so the app runs end-to-end without any external credentials.
@@ -33,6 +39,10 @@ class Settings(BaseSettings):
     max_resume_bytes: int = 5 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def admin_allowed_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_allowed_emails.split(",") if e.strip()}
 
 
 settings = Settings()

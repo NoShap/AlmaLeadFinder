@@ -75,18 +75,39 @@ allowlist, max file size (5 MB). Errors are structured JSON the form can render 
 
 ## 6. Auth
 
-Scope-appropriate choice: a single attorney account configured via env vars
-(`ADMIN_EMAIL` / `ADMIN_PASSWORD`, hash checked server-side), exchanged for a
-short-lived JWT that the Next.js admin pages send as a Bearer token.
+Primary flow: **Google Sign-In (OAuth) with an email allowlist.**
 
-*Production path (documented, not built):* SSO / managed auth (Clerk, Auth0, or
-NextAuth with an IdP), per-attorney accounts, roles, audit log of who marked a lead.
+1. The login page renders Google's Sign-In button (needs only a public OAuth client
+   ID — no client secret, since we consume ID tokens, not access tokens).
+2. The backend verifies the Google ID token (signature against Google's JWKS,
+   audience, expiry, `email_verified`) and checks the email against
+   `ADMIN_ALLOWED_EMAILS`; if allowlisted, it issues a short-lived app JWT.
+3. The JWT is stored in a cookie so Next.js **middleware** can gate `/admin/*` routes
+   (redirect to login when absent). The middleware is deliberately a UX gate only —
+   every internal API endpoint (lead list, resume download, and the
+   `PENDING → REACHED_OUT` state PATCH) independently verifies the JWT **and
+   re-checks the allowlist on each request**, so delisting an email revokes access
+   immediately even for unexpired tokens.
+
+Fallback flow: env-configured credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) exchanged
+for the same JWT — kept so reviewers can run the E2E demo without creating a Google
+OAuth client. Disable in production by rotating the password.
+
+*Production path (documented, not built):* per-attorney records with roles instead of
+an env allowlist, HttpOnly session cookies via a BFF pattern, audit log of who marked
+each lead.
 
 ## 7. Email flow
 
 - Provider: **Resend** (simple API, generous free tier). Wrapped behind an
   `EmailService` interface with a **console/log fallback** so the app runs locally
   with zero API keys — the fallback prints the rendered email to stdout.
+- Sender domain: `pactfulapp.com` — a domain I already owned from an unrelated side
+  project, verified in Resend (DKIM/SPF) so delivery to *arbitrary* prospect
+  addresses could be tested end-to-end. Resend's unverified sandbox sender only
+  delivers to the account owner's inbox, which is fine for smoke tests but doesn't
+  prove the real prospect-confirmation path. The domain is pure configuration
+  (`EMAIL_FROM`); a production deployment would swap in the company domain.
 - Two templates on lead creation:
   1. **Prospect confirmation** — "Thanks {first_name}, we received your information."
   2. **Attorney notification** — lead summary + link to the admin dashboard.
@@ -145,7 +166,7 @@ NextAuth with an IdP), per-attorney accounts, roles, audit log of who marked a l
 | DB | Postgres (docker) | "Production-level" signal; SQLite alone reads as toy. SQLite kept for tests. |
 | Email | Resend + console fallback | Reviewer can run E2E without secrets; real integration still demonstrated. |
 | Emails async? | BackgroundTasks, post-commit | Submission UX must not depend on the email provider; full queue is overkill here. |
-| Auth | Env-credential + JWT | Smallest thing that is honestly "auth"; production path documented. |
+| Auth | Google OAuth + email allowlist, JWT in cookie, Next middleware gate | Real OAuth without secrets (ID-token flow); allowlist re-checked per request server-side. Env-credential fallback kept so reviewers can run the demo with zero OAuth setup. |
 | Resume storage | MinIO (S3 API) via boto3 | Same code path as production S3 — promoting to AWS is config-only. Local-disk fallback keeps tests and no-docker dev dependency-free. MinIO complements Postgres (files vs. queryable lead rows); it does not replace it. |
 | Monorepo | Yes | One clone, one compose file, one README — reviewer friction matters. |
 
