@@ -26,6 +26,10 @@ class FileStorage(abc.ABC):
     def load(self, key: str) -> bytes:
         """Return the file's bytes. Raises FileNotFoundError if the key is unknown."""
 
+    @abc.abstractmethod
+    def delete(self, key: str) -> None:
+        """Remove the file. Deleting an unknown key is a no-op."""
+
 
 def _make_key(original_filename: str) -> str:
     suffix = Path(original_filename).suffix.lower()
@@ -49,6 +53,12 @@ class LocalDiskStorage(FileStorage):
         if not path.is_file():
             raise FileNotFoundError(key)
         return path.read_bytes()
+
+    def delete(self, key: str) -> None:
+        path = (self._root / key).resolve()
+        if self._root.resolve() not in path.parents:
+            return
+        path.unlink(missing_ok=True)
 
 
 class S3FileStorage(FileStorage):
@@ -87,6 +97,10 @@ class S3FileStorage(FileStorage):
                 raise FileNotFoundError(key) from exc
             raise
         return response["Body"].read()
+
+    def delete(self, key: str) -> None:
+        # S3 DeleteObject is idempotent — no error for a missing key.
+        self._client.delete_object(Bucket=self._bucket, Key=key)
 
 
 @lru_cache(maxsize=4)

@@ -99,6 +99,11 @@ def test_lead_lifecycle(api, auth_headers):
     )
     assert again.status_code == 409
 
+    # Clean up so e2e runs don't clutter the real leads list.
+    deleted = api.delete(f"/api/leads/{lead['id']}", headers=auth_headers)
+    assert deleted.status_code == 204
+    assert api.get(f"/api/leads/{lead['id']}", headers=auth_headers).status_code == 404
+
 
 def test_frontend_serves_and_middleware_gates_admin(api, auth_headers):
     with httpx.Client(base_url=FRONTEND_URL, timeout=10) as web:
@@ -112,5 +117,6 @@ def test_frontend_serves_and_middleware_gates_admin(api, auth_headers):
         assert anonymous.headers["location"].endswith("/admin/login")
 
         token = auth_headers["Authorization"].removeprefix("Bearer ")
-        authed = web.get("/admin", cookies={"alma_admin_token": token})
+        web.cookies.set("alma_admin_token", token)
+        authed = web.get("/admin")
         assert authed.status_code == 200

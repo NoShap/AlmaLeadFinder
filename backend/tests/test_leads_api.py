@@ -154,6 +154,28 @@ class TestStateMachine:
         assert response.status_code == 401
 
 
+class TestLeadDeletion:
+    def test_delete_removes_lead_and_resume(self, client, auth_headers):
+        lead_id = create_lead(client).json()["id"]
+        response = client.delete(f"/api/leads/{lead_id}", headers=auth_headers)
+        assert response.status_code == 204
+        assert client.get(f"/api/leads/{lead_id}", headers=auth_headers).status_code == 404
+        assert (
+            client.get(f"/api/leads/{lead_id}/resume", headers=auth_headers).status_code == 404
+        )
+        assert client.get("/api/leads", headers=auth_headers).json()["total"] == 0
+
+    def test_delete_unknown_lead_404(self, client, auth_headers):
+        response = client.delete(
+            "/api/leads/00000000-0000-0000-0000-000000000000", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    def test_delete_requires_auth(self, client):
+        lead_id = create_lead(client).json()["id"]
+        assert client.delete(f"/api/leads/{lead_id}").status_code == 401
+
+
 class TestResumeDownload:
     def test_download_returns_original_file(self, client, auth_headers):
         content = b"%PDF-1.4 the actual resume bytes"

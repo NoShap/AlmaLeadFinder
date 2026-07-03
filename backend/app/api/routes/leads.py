@@ -141,6 +141,26 @@ def update_lead_state(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
+@router.delete(
+    "/{lead_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+def delete_lead(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    lead = lead_service.get_lead(db, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    resume_path = lead.resume_path
+    lead_service.delete_lead(db, lead)
+    # Best-effort: the DB row is the source of truth; an orphaned object in
+    # storage is harmless, a lead pointing at a deleted object is not.
+    try:
+        get_storage().delete(resume_path)
+    except Exception:
+        pass
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{lead_id}/resume", dependencies=[Depends(require_admin)])
 def download_resume(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     lead = lead_service.get_lead(db, lead_id)

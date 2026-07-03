@@ -1,7 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { fakeResume, submitLeadViaForm, uniqueLead } from "./helpers";
+import { cleanupSubmittedLeads, submitLeadViaForm, uniqueLead } from "./helpers";
 
 test.describe("public lead form", () => {
+  test.afterAll(async () => {
+    await cleanupSubmittedLeads();
+  });
+
   test("renders the assessment form", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Get an assessment" })).toBeVisible();

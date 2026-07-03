@@ -1,5 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { loginAsAttorney, submitLeadViaForm, uniqueLead } from "./helpers";
+import {
+  cleanupSubmittedLeads,
+  loginAsAttorney,
+  submitLeadViaForm,
+  uniqueLead,
+} from "./helpers";
+
+test.afterAll(async () => {
+  await cleanupSubmittedLeads();
+});
 
 /**
  * The full product walk-through from the README demo: a prospect submits the
@@ -37,13 +46,13 @@ test("prospect submits → attorney reviews, downloads resume, marks reached out
 
   await test.step("attorney marks the lead reached out", async () => {
     await row.getByRole("button", { name: "Mark reached out" }).click();
-    await expect(row.locator(".badge.reached-out")).toHaveText("REACHED_OUT");
+    await expect(row.locator(".badge.reached-out")).toHaveText("REACHED OUT");
     await expect(row.getByRole("button", { name: "Mark reached out" })).toHaveCount(0);
   });
 
   await test.step("the state survives a reload", async () => {
     await page.reload();
     const rowAfterReload = page.getByRole("row", { name: new RegExp(lead.lastName) });
-    await expect(rowAfterReload.locator(".badge.reached-out")).toHaveText("REACHED_OUT");
+    await expect(rowAfterReload.locator(".badge.reached-out")).toHaveText("REACHED OUT");
   });
 });

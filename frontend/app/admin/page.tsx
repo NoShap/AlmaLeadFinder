@@ -145,7 +145,7 @@ export default function AdminDashboardPage() {
                     {lead.state === "PENDING" ? (
                       <span className="badge pending">PENDING</span>
                     ) : (
-                      <span className="badge reached-out">REACHED_OUT</span>
+                      <span className="badge reached-out">REACHED OUT</span>
                     )}
                   </td>
                   <td className="nowrap">

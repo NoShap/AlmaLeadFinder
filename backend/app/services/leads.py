@@ -76,6 +76,11 @@ def list_leads(db: Session, *, limit: int = 50, offset: int = 0) -> tuple[list[L
     return leads, total
 
 
+def delete_lead(db: Session, lead: Lead) -> None:
+    db.delete(lead)
+    db.commit()
+
+
 def transition_lead(db: Session, lead: Lead, new_state: LeadState) -> Lead:
     if new_state not in ALLOWED_TRANSITIONS[lead.state]:
         raise InvalidStateTransition(lead.state, new_state)
